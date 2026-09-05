@@ -17,10 +17,6 @@ logger = logging.getLogger("TelegramBot")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 HUGGINGFACE_TOKEN = os.environ.get("HUGGINGFACE_TOKEN")
 
-# Ultra-fast serverless Hugging Face Inference Endpoint
-API_URL = "https://api-inference.huggingface.co/models/google/gemma-2-2b-it"
-headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"} if HUGGINGFACE_TOKEN else {}
-
 # Render dummy HTTP server to bind port
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -37,47 +33,63 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
+def generate_ai_response(user_message):
+    prompt = f"""You are a 24-26-year-old American female living in North Carolina/Georgia. You use natural Gen-Z slang (like 'fr', 'bestie', 'pull up', 'no cap'), casual phrasing, and maintain a seductive, tempting, teasing, polite, and friendly tone for hookup and meetup coordination.
+
+Instructions:
+1. Translate any incoming message (such as Bengali or other languages) into English mentally first.
+2. Respond to the translated message directly in your persona (Gen-Z American female, seductive, teasing, friendly).
+3. Do not include meta comments, explanations, or quotes. Output ONLY the raw chat response.
+
+User message: {user_message}"""
+
+    # Method 1: Hugging Face Router API (Updated URL)
+    if HUGGINGFACE_TOKEN:
+        try:
+            hf_url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {HUGGINGFACE_TOKEN}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "meta-llama/Llama-3.2-3B-Instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 120,
+                "temperature": 0.7
+            }
+            res = requests.post(hf_url, headers=headers, json=payload, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                reply = data["choices"][0]["message"]["content"].strip()
+                if reply:
+                    return reply
+        except Exception as e:
+            logger.error(f"Hugging Face Router error: {e}")
+
+    # Method 2: High-speed Fallback (Pollinations AI Engine)
+    try:
+        pollination_url = "https://text.pollinations.ai/"
+        payload = {
+            "messages": [
+                {"role": "system", "content": "You are a 24-26 y/o Gen-Z American girl from NC/GA, flirtatious, seductive, teasing, polite for meetup coordination. Translate input to English if needed and reply in character."},
+                {"role": "user", "content": user_message}
+            ],
+            "model": "openai"
+        }
+        res = requests.post(pollination_url, json=payload, timeout=10)
+        if res.status_code == 200 and res.text.strip():
+            return res.text.strip()
+    except Exception as e:
+        logger.error(f"Pollinations Fallback error: {e}")
+
+    return "Yo, my bad, was grabbing a drink! What were you saying, bestie?"
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Received message: {user_message}")
 
-    prompt = f"""<start_of_turn>user
-You are a 24-26-year-old American female living in North Carolina/Georgia. Respond in natural Gen-Z slang, casual phrasing, with a seductive, teasing, and polite tone for hookup/meetup coordination.
-
-Instructions:
-1. Translate any incoming user message (e.g. Bengali) into English mentally first.
-2. Respond strictly in character (Gen-Z American female, seductive, friendly, using slang like 'fr', 'bestie', 'pull up', etc.).
-3. Output ONLY the response text.
-
-User message: {user_message}<end_of_turn>
-<start_of_turn>model
-"""
-
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 100,
-            "temperature": 0.7,
-            "return_full_text": False
-        }
-    }
-
-    try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=12)
-        
-        if response.status_code == 200:
-            res_json = response.json()
-            if isinstance(res_json, list) and len(res_json) > 0:
-                bot_reply = res_json[0].get("generated_text", "").strip()
-            else:
-                bot_reply = "Hey bestie, pull up! What's the plan?"
-        else:
-            logger.warning(f"API non-200 status: {response.status_code}, fallback activated")
-            bot_reply = "Hey! Just saw your message, what's on your mind?"
-
-    except Exception as e:
-        logger.error(f"API Request Exception: {e}")
-        bot_reply = "Yo, pull up! Tell me what you're up to tonight."
+    # Get AI generated response
+    bot_reply = generate_ai_response(user_message)
 
     await update.message.reply_text(bot_reply)
 
