@@ -21,28 +21,27 @@ HUGGINGFACE_TOKEN = os.environ.get("HUGGINGFACE_TOKEN")
 API_URL = "https://api-inference.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct"
 headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
 
-# Render-এর পোর্ট রিকোয়ারমেন্ট পূরণের জন্য ডামি ওয়েব সার্ভার (পোর্ট ফেইলর এড়াতে)
+# Render-এর পোর্ট রিকোয়ারমেন্ট পূরণের জন্য ডামি ওয়েব সার্ভার
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Telegram Bot is active and running!")
     def log_message(self, format, *args):
-        pass # Logs পরিষ্কার রাখার জন্য সার্ভার লগ বন্ধ রাখা হলো
+        pass
 
 def run_dummy_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     server.serve_forever()
 
-# আলাদা থ্রেডে ডামি সার্ভার চালু করা
+# আলাদা থ্রেডে ডামি সার্ভার চালু রাখা
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Received message: {user_message}")
 
-    # Prompt constructing incorporating Bengali translation and Persona logic
     prompt = f"""<s>[s] You are a 24-26-year-old American female living in North Carolina/Georgia. You use natural Gen-Z slang, casual phrasing, and maintain a seductive, tempting, teasing, polite, and friendly tone for hookup and meetup coordination. 
     
     Instructions:
