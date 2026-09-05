@@ -1,11 +1,10 @@
 import os
 import logging
-import requests
-import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from groq import Groq
 
 # Enable logging
 logging.basicConfig(
@@ -14,8 +13,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("TelegramBot")
 
-# Load Telegram Token
+# Environment Variables
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+# Initialize Groq Client
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 # Render dummy HTTP server to bind port
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -33,34 +36,38 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-def get_dynamic_ai_response(user_message):
-    system_prompt = (
+def generate_ai_response(user_message):
+    if not groq_client:
+        logger.error("GROQ_API_KEY is missing!")
+        return "Hey babe! Give me a quick sec, setting up my phone."
+
+    system_instruction = (
         "You are a 24-26 year old American female living in NC/GA. "
-        "Translate any non-English message (like Bengali) to English internally. "
+        "If the user writes in any other language (like Bengali), translate it mentally to English first. "
         "Respond strictly in persona: Gen-Z, seductive, teasing, friendly, using slang like 'fr', 'bestie', 'pull up'. "
-        "Do not output meta commentary or quotes."
+        "Do not include quotes or meta comments. Output ONLY the response text."
     )
-    
-    full_prompt = f"{system_prompt}\nUser says: {user_message}\nResponse:"
-    encoded_prompt = urllib.parse.quote(full_prompt)
-    
-    # Ultra-reliable direct API stream
-    url = f"https://text.pollinations.ai/{encoded_prompt}?model=openai"
-    
+
     try:
-        res = requests.get(url, timeout=15)
-        if res.status_code == 200 and res.text.strip():
-            return res.text.strip()
+        completion = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=150
+        )
+        return completion.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Pollinations GET Error: {e}")
-        
-    return "Yo, my brain lagged for a second, fr. Say that again?"
+        logger.error(f"Groq API Error: {e}")
+        return "Yo, my network glitched for a sec fr. What were you saying?"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Received message: {user_message}")
 
-    bot_reply = get_dynamic_ai_response(user_message)
+    bot_reply = generate_ai_response(user_message)
     await update.message.reply_text(bot_reply)
 
 # Main Execution Block
