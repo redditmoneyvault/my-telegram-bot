@@ -77,7 +77,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(bot_reply)
 
-if name == 'main':
+if __name__ == '__main__':
     if not TELEGRAM_TOKEN or not HUGGINGFACE_TOKEN:
         logger.error("ERROR: TELEGRAM_BOT_TOKEN or HUGGINGFACE_TOKEN is missing!")
     else:
