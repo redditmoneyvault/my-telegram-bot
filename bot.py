@@ -11,7 +11,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-logger = logging.getLogger(name)
+logger = logging.getLogger("TelegramBot")
 
 # Load tokens from environment variables
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -77,11 +77,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(bot_reply)
 
-if __name__ == '__main__':
-    if not TELEGRAM_TOKEN or not HUGGINGFACE_TOKEN:
-        logger.error("ERROR: TELEGRAM_BOT_TOKEN or HUGGINGFACE_TOKEN is missing!")
-    else:
-        app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-        print("Bot is running...")
-        app.run_polling()
+# Main Execution Block
+if not TELEGRAM_TOKEN or not HUGGINGFACE_TOKEN:
+    logger.error("ERROR: TELEGRAM_BOT_TOKEN or HUGGINGFACE_TOKEN is missing!")
+else:
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    print("Bot is running...")
+    app.run_polling()
