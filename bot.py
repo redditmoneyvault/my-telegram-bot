@@ -39,7 +39,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(bot_reply)
 
-if name == 'main':
+if __name__ == '__main__':
     TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
     if TELEGRAM_TOKEN:
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
