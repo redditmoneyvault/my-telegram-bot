@@ -19,34 +19,40 @@ threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT"
 
 def generate_ai_response(user_message):
     if not GROQ_API_KEY:
-        return "⚠️ Render-এ GROQ_API_KEY সেট করা নেই! দয়া করে Environment Variables-এ গিয়ে সেটি অ্যাড করে Save করুন।"
+        return "⚠️ GROQ_API_KEY is missing!"
 
-    try:
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        payload = {
-            "model": "llama3-8b-8192", 
-            "messages": [
-                {
-                    "role": "system", 
-                    "content": "You are a 24-26 year old American female in NC/GA. Translate any non-English message mentally to English. Respond strictly in persona: Gen-Z, seductive, teasing, friendly, using slang. No quotes or meta comments."
-                },
-                {"role": "user", "content": user_message}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 150
-        }
-        res = requests.post(
-            url, 
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}, 
-            json=payload, 
-            timeout=10
-        )
-        
-        if res.status_code == 200:
-            return res.json()["choices"][0]["message"]["content"].strip()
-        return f"⚠️ API Error: {res.text}"
-    except Exception as e:
-        return f"⚠️ Error: {str(e)}"
+    # 5 Backup Models - if one fails, it instantly tries the next one
+    models_to_try = [
+        "llama-3.1-70b-versatile",
+        "llama-3.3-70b-versatile",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it",
+        "llama-3.1-8b-instant"
+    ]
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    system_prompt = "You are a 24-26 year old American female in NC/GA. Translate any non-English message mentally to English. Respond strictly in persona: Gen-Z, seductive, teasing, friendly, using slang. No quotes or meta comments."
+
+    for model in models_to_try:
+        try:
+            payload = {
+                "model": model, 
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 150
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=8)
+            
+            if res.status_code == 200:
+                return res.json()["choices"][0]["message"]["content"].strip()
+        except Exception:
+            continue # Silent continue to next backup model
+            
+    return "⚠️ Sorry babe, my brain is completely fried right now (All models failed)."
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(generate_ai_response(update.message.text))
