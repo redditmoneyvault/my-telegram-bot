@@ -17,11 +17,11 @@ logger = logging.getLogger("TelegramBot")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 HUGGINGFACE_TOKEN = os.environ.get("HUGGINGFACE_TOKEN")
 
-# Hugging Face Inference API details (Phi-3 model)
-API_URL = "https://api-inference.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct"
+# Reliable Hugging Face Model for fast responses
+API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
 headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
 
-# Render-এর পোর্ট রিকোয়ারমেন্ট পূরণের জন্য ডামি ওয়েব সার্ভার
+# Render dummy HTTP server to bind port
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -35,45 +35,46 @@ def run_dummy_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     server.serve_forever()
 
-# আলাদা থ্রেডে ডামি সার্ভার চালু রাখা
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Received message: {user_message}")
 
-    prompt = f"""<s>[s] You are a 24-26-year-old American female living in North Carolina/Georgia. You use natural Gen-Z slang, casual phrasing, and maintain a seductive, tempting, teasing, polite, and friendly tone for hookup and meetup coordination. 
-    
-    Instructions:
-    1. If the incoming message is in Bengali or any other language, first translate its core meaning into English internally.
-    2. Respond to the translated message directly in your persona (Gen-Z American female, seductive, teasing, friendly, localized slang like 'fr', 'bestie', 'pull up', etc.).
-    3. Keep the response natural, engaging, and directly reply as the persona. Do not include meta-commentary.
+    prompt = f"""<s>[INST] You are a 24-26-year-old American female living in North Carolina/Georgia. You use natural Gen-Z slang, casual phrasing, and maintain a seductive, tempting, teasing, polite, and friendly tone for hookup and meetup coordination.
 
-    Incoming user message: {user_message}
-    Draft Reply for me: [/s]"""
+Instructions:
+1. Translate any incoming message (like Bengali) into English mentally first.
+2. Respond to the user's intent in your persona (Gen-Z American female, seductive, friendly, using slang like 'fr', 'bestie', 'pull up', etc.).
+3. Give ONLY the direct reply in character. No meta comments.
+
+User message: {user_message} [/INST]"""
 
     payload = {
         "inputs": prompt,
         "parameters": {
-            "max_new_tokens": 150,
+            "max_new_tokens": 120,
             "temperature": 0.7,
             "return_full_text": False
         }
     }
 
     try:
-        response = requests.post(API_URL, headers=headers, json=payload)
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=20)
         res_json = response.json()
 
         if isinstance(res_json, list) and len(res_json) > 0:
-            bot_reply = res_json[0].get("generated_text", "Yo, my brain lagged for a sec, fr.")
-            if "Draft Reply for me:" in bot_reply:
-                bot_reply = bot_reply.split("Draft Reply for me:")[-1].strip()
+            bot_reply = res_json[0].get("generated_text", "").strip()
+            if not bot_reply:
+                bot_reply = "Yo, pull up! What's the plan?"
+        elif isinstance(res_json, dict) and "error" in res_json:
+            logger.error(f"Hugging Face Error: {res_json['error']}")
+            bot_reply = "My model is waking up, send that again in 10 secs!"
         else:
-            bot_reply = "My bad, hit me up again, fr."
+            bot_reply = "Yo, my brain lagged for a sec. Say that again?"
     except Exception as e:
-        logger.error(f"Error calling Hugging Face API: {e}")
-        bot_reply = "Yo, something went wrong on my end."
+        logger.error(f"API Request Exception: {e}")
+        bot_reply = "Yo, network acting up on my end, hit me up again!"
 
     await update.message.reply_text(bot_reply)
 
