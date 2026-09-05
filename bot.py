@@ -7,7 +7,6 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-# Remove any accidental spaces from the API key
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -22,30 +21,38 @@ threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT"
 def generate_ai_response(user_message):
     system_prompt = "You are a 24-26 year old American female in NC/GA. Translate any non-English message mentally to English. Respond strictly in persona: Gen-Z, seductive, teasing, friendly, using slang. No quotes or meta comments."
     
-    groq_error = "API Key not found in Render Environment Variables."
+    # Active models list for Groq
+    models_to_try = [
+        "llama-3.3-70b-versatile",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it",
+        "llama-3.1-70b-versatile"
+    ]
     
-    # Method 1: Groq API
+    groq_error = "API Key not found or invalid."
+    
     if GROQ_API_KEY:
-        try:
-            res = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": "llama-3.1-8b-instant",
-                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}],
-                    "temperature": 0.7,
-                    "max_tokens": 150
-                },
-                timeout=10
-            )
-            if res.status_code == 200:
-                return res.json()["choices"][0]["message"]["content"].strip()
-            else:
-                groq_error = res.text # Capture the exact error from Groq
-        except Exception as e:
-            groq_error = str(e)
+        for model in models_to_try:
+            try:
+                res = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}],
+                        "temperature": 0.7,
+                        "max_tokens": 150
+                    },
+                    timeout=8
+                )
+                if res.status_code == 200:
+                    return res.json()["choices"][0]["message"]["content"].strip()
+                else:
+                    groq_error = res.text
+            except Exception as e:
+                groq_error = str(e)
 
-    # Method 2: Free Fallback API (If Groq fails for ANY reason)
+    # Fallback to free backup API if needed
     try:
         encoded_prompt = urllib.parse.quote(f"{system_prompt}\nUser says: {user_message}\nResponse:")
         res_fall = requests.get(f"https://text.pollinations.ai/{encoded_prompt}?model=openai", timeout=15)
@@ -54,8 +61,7 @@ def generate_ai_response(user_message):
     except Exception:
         pass
 
-    # If BOTH methods fail, show the exact reason why Groq failed so we can fix it
-    return f"⚠️ Error Detail:\nGroq failed because: {groq_error}"
+    return f"⚠️ Error Detail: {groq_error}"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(generate_ai_response(update.message.text))
